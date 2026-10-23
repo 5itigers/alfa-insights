@@ -32,7 +32,7 @@ class BGEEmbedder:
         )
         model = SentenceTransformer(self.model_name, revision=self.revision, device=device)
         model.max_seq_length = self.max_length
-        if model.get_sentence_embedding_dimension() != self.dimension:
+        if model.get_embedding_dimension() != self.dimension:
             raise ValueError("The embedding model does not produce 1024-dimensional vectors")
         return model
 
