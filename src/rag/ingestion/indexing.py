@@ -5,7 +5,6 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
-import os
 from pathlib import Path
 
 from ..embeddings import BGEEmbedder
@@ -138,10 +137,7 @@ def main():
     parser.add_argument("--no-ocr", action="store_true")
     parser.add_argument("--tessdata-dir")
     args = parser.parse_args()
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        parser.error("Set DATABASE_URL to your PostgreSQL connection URL")
-    store = PostgresStore(database_url)
+    store = PostgresStore()
     if args.init_db:
         store.initialize()
     operation = index_directory if args.path.is_dir() else index_document

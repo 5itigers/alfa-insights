@@ -2,9 +2,13 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+import os
 from pathlib import Path
 
 import numpy as np
+from transformers.utils.import_utils import requires
+
+DEFAULT_DATABASE_URL = "postgresql://postgres@localhost:5432/AI-Service-vectordb"
 
 
 @dataclass(frozen=True)
@@ -24,10 +28,13 @@ class IndexedDocument:
 
 
 class PostgresStore:
-    def __init__(self, database_url):
-        if not database_url:
+    def __init__(self, database_url=None):
+        self.database_url = (
+            os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
+            if database_url is None else database_url
+        )
+        if not self.database_url:
             raise ValueError("A PostgreSQL connection URL is required")
-        self.database_url = database_url
 
     def _connect(self):
         import psycopg
@@ -60,6 +67,13 @@ class PostgresStore:
             raise ValueError("All chunks must belong to the indexed document")
         if len({chunk.chunk_id for chunk in chunks}) != len(chunks):
             raise ValueError("Chunk IDs must be unique within a document version")
+        if any(
+            not chunk.text or chunk.start_char < 0 or chunk.end_char <= chunk.start_char
+            or chunk.token_count <= 0 or chunk.extraction_method not in {"text", "ocr"}
+            or (chunk.page_number is not None and chunk.page_number <= 0)
+            for chunk in chunks
+        ):
+            raise ValueError("Chunks must have nonempty text and valid citation metadata")
 
         from pgvector.psycopg import register_vector
         from psycopg.types.json import Jsonb
@@ -101,18 +115,24 @@ class PostgresStore:
                 )
                 with connection.cursor() as cursor:
                     cursor.executemany(
-                        """INSERT INTO rag_chunks (
-                            document_version_id, chunk_id, chunk_index, text, page_number,
-                            start_char, end_char, token_count, extraction_method, embedding
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (document_version_id, chunk_id) DO NOTHING""",
+                        """INSERT INTO document_chunks (
+                            source_id, chunk_index, content, metadata, embedding
+                        ) VALUES (%s, %s, %s, %s, %s)""",
                         [
                             (
-                                document.version_id, chunk.chunk_id, chunk.chunk_index,
-                                chunk.text, chunk.page_number, chunk.start_char, chunk.end_char,
-                                chunk.token_count, chunk.extraction_method, vector,
+                                document.version_id, position, chunk.text,
+                                Jsonb({
+                                    "chunk_id": chunk.chunk_id,
+                                    "page_number": chunk.page_number,
+                                    "page_chunk_index": chunk.chunk_index,
+                                    "start_char": chunk.start_char,
+                                    "end_char": chunk.end_char,
+                                    "token_count": chunk.token_count,
+                                    "extraction_method": chunk.extraction_method,
+                                }),
+                                vector,
                             )
-                            for chunk, vector in zip(chunks, embeddings)
+                            for position, (chunk, vector) in enumerate(zip(chunks, embeddings))
                         ],
                     )
                 return len(chunks)
