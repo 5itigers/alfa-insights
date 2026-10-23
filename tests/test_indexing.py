@@ -1,7 +1,7 @@
 import sys
 import tempfile
 import unittest
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -13,7 +13,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from rag.embeddings import BGEEmbedder
 from rag.ingestion.indexing import index_directory, index_document
 from rag.storage import PostgresStore
-from test_chunking import make_tokenizer
+if __package__:
+    from .test_chunking import make_tokenizer
+else:
+    from test_chunking import make_tokenizer
 
 
 class FixtureEncoder:
@@ -169,6 +172,15 @@ class IndexingTests(unittest.TestCase):
         encoder = BGEEmbedder()
         self.assertEqual(encoder.encode_passages([]).shape, (0, 1024))
         self.assertNotIn("model", encoder.__dict__)
+
+    def test_storage_rejects_invalid_page_metadata_before_connecting(self):
+        self.index()
+        document, chunks, vectors = self.store.saved[0]
+        invalid_chunks = [replace(chunk, page_number=0) for chunk in chunks]
+        store = PostgresStore("postgresql://unused")
+        with patch.object(store, "_connect", side_effect=AssertionError("Must validate first")):
+            with self.assertRaisesRegex(ValueError, "citation metadata"):
+                store.save_document(document, invalid_chunks, vectors)
 
     def test_embedding_adapter_rejects_overlong_inputs_before_encoding(self):
         encoder = BGEEmbedder(max_length=4)
