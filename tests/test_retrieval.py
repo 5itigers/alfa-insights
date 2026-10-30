@@ -182,7 +182,7 @@ class RetrievalIntegrationTests(unittest.TestCase):
         self.add("a-semantic", "Рост стоимости заимствований.", 1)
         agreement = self.add("b-agreement", "Ключевая ставка снижена.", 0.8)
         self.add("c-keyword", "Ключевая ставка повышена.", 0.2)
-        results = self.retriever.retrieve("ключевая ставка", top_k=3, candidate_limit=3)
+        results = self.retriever.retrieve("Ключевая ставка", top_k=3, candidate_limit=3)
         self.assertEqual(results[0].version_id, agreement)
         self.assertEqual(len({result.citation_id for result in results}), 3)
         for result in results:
@@ -194,7 +194,7 @@ class RetrievalIntegrationTests(unittest.TestCase):
     def test_keyword_candidate_can_survive_outside_vector_candidate_limit(self):
         self.add("semantic", "Стоимость заимствований растёт.", 1)
         keyword = self.add("keyword", "Ключевая ставка снижена.", 0)
-        results = self.retriever.retrieve("ключевая ставка", top_k=1, candidate_limit=1)
+        results = self.retriever.retrieve("Ключевая ставка", top_k=1, candidate_limit=1)
         self.assertEqual(results[0].version_id, keyword)
         self.assertIsNone(results[0].vector_rank)
         self.assertIsNone(results[0].vector_score)
